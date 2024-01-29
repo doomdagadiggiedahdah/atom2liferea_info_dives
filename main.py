@@ -1,54 +1,61 @@
+import io
 import os
+from lxml import etree
 import subprocess as sub
-from http.server import HTTPServer, SimpleHTTPRequestHandler
 from threading import Thread
 import urllib, urllib.request
-from lxml import etree
-import io
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+os.chdir("/home/mat/Documents/ProgramExperiments/liferea_bs")
 
-topic = input("what do you want to learn about?\n").replace(" ", "%20")
+## search queries
+topic = ""
+while topic == "":
+    topic = input("what do you want to learn about?\n").replace(" ", "%20")
 
 num_results = input("how many results do you want? Pressing enter gives 25\n")
 if num_results == "":
     num_results = 25
 
-os.chdir("/home/mat/Documents/ProgramExperiments/liferea_bs")
+## fun defs
 url = f"http://export.arxiv.org/api/query?search_query=all:{topic}&start=0&max_results={num_results}"
+running = True # server runs until updated False
 data = urllib.request.urlopen(url).read().decode('utf-8')
 data = data.split('?>', 1)[-1]
+file = "feed.atom"
+port = 8000
+link = f"http://0.0.0.0:{port}/{file}"
 
-RUNNING = True
-PORT = 8000
-FILE = "test.atom"
-
+## functions
 def xml_val(string):
     try:
-        etree.parse(io.StringIO(string))
-        return "xml is good"
+        etree.fromstring(string)
+        return True
     except etree.XMLSyntaxError as e:
-        return f"Syntax Error:\n{e}"
-
-print(xml_val(data))
-
-with open('test.atom', 'w') as f:
-    f.write(data)
+        f"Syntax Error:\n{e}"
+        return False
 
 def serve():
     global server
-    server = HTTPServer(("0.0.0.0", PORT), SimpleHTTPRequestHandler)
-    while RUNNING:
+    server = HTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
+    while running:
         server.handle_request()
 
-t = Thread(target=serve)
-t.start()
+## run it
+if xml_val(data):
+    with open(file, 'w') as f:
+        f.write(data)
 
-link = f"http://0.0.0.0:{PORT}/{FILE}"
-result = sub.run(["liferea-add-feed", link], capture_output=True, text=True)
+    t = Thread(target=serve)
+    t.start()
+    result = sub.run(["liferea-add-feed", link], capture_output=True, text=True)
+    running = False # close server
 
-RUNNING = False
-print(f"output: {result.stdout}")
-
-if result.returncode == 0:
-    print("all good")
+    # check if liferea accepted
+    if result.returncode == 0:
+        print("added to feed")
+    else:
+        print("not added to feed")
 else:
-    print("didn't work")
+    print("bad xml, try again")
+
+# another thing would be getting from multiple sources
